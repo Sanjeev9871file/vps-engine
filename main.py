@@ -21,6 +21,12 @@ SUPABASE_URL = os.getenv(
 SUPABASE_KEY = os.getenv("SUPABASE_KEY", "")
 
 
+def get_supabase() -> Client:
+  if not SUPABASE_KEY:
+    raise HTTPException(status_code=500, detail="Supabase key not configured")
+  return create_client(SUPABASE_URL, SUPABASE_KEY)
+
+
 class VPSRequest(BaseModel):
   name: str
   os: str = "Ubuntu 24.04 LTS"
@@ -37,19 +43,18 @@ def create_vps(req: VPSRequest):
   chars = string.ascii_letters + string.digits + "@#$"
   password = "".join(random.choice(chars) for _ in range(12))
 
-  # Save server in Supabase if key is configured
-  if SUPABASE_KEY:
-    try:
-      supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
-      supabase.table("servers").insert({
+  supabase = get_supabase()
+  res = (
+      supabase.table("servers")
+      .insert({
           "name": req.name,
           "ip_address": fake_ip,
           "os_name": req.os,
           "status": "running",
           "root_password": password,
-      }).execute()
-    except Exception as e:
-      print(f"DB Error: {e}")
+      })
+      .execute()
+  )
 
   return {
       "status": "success",
@@ -58,17 +63,14 @@ def create_vps(req: VPSRequest):
           "os": req.os,
           "ip": fake_ip,
           "root_password": password,
-          "ssh_command": f"ssh root@{fake_ip}",
       },
   }
 
 
 @app.get("/api/servers")
 def get_servers():
-  if not SUPABASE_KEY:
-    return {"servers": []}
   try:
-    supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
+    supabase = get_supabase()
     res = (
         supabase.table("servers")
         .select("*")
@@ -76,5 +78,37 @@ def get_servers():
         .execute()
     )
     return {"servers": res.data}
+  except Exception as e:
+    raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.delete("/api/servers/{server_id}")
+def delete_server(server_id: int):
+  try:
+    supabase = get_supabase()
+    supabase.table("servers").delete().eq("id", server_id).execute()
+    return {"status": "success", "message": "Server terminated successfully"}
+  except Exception as e:
+    raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/servers/{server_id}/toggle")
+def toggle_status(server_id: int):
+  try:
+    supabase = get_supabase()
+    res = (
+        supabase.table("servers")
+        .select("status")
+        .eq("id", server_id)
+        .single()
+        .execute()
+    )
+    current_status = res.data.get("status", "running")
+    new_status = "stopped" if current_status == "running" else "running"
+
+    supabase.table("servers").update({"status": new_status}).eq(
+        "id", server_id
+    ).execute()
+    return {"status": "success", "new_status": new_status}
   except Exception as e:
     raise HTTPException(status_code=500, detail=str(e))
