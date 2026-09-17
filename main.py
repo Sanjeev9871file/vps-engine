@@ -1,6 +1,7 @@
 import os
 import random
 import string
+from typing import Union
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -44,17 +45,13 @@ def create_vps(req: VPSRequest):
   password = "".join(random.choice(chars) for _ in range(12))
 
   supabase = get_supabase()
-  res = (
-      supabase.table("servers")
-      .insert({
-          "name": req.name,
-          "ip_address": fake_ip,
-          "os_name": req.os,
-          "status": "running",
-          "root_password": password,
-      })
-      .execute()
-  )
+  supabase.table("servers").insert({
+      "name": req.name,
+      "ip_address": fake_ip,
+      "os_name": req.os,
+      "status": "running",
+      "root_password": password,
+  }).execute()
 
   return {
       "status": "success",
@@ -83,31 +80,31 @@ def get_servers():
 
 
 @app.delete("/api/servers/{server_id}")
-def delete_server(server_id: int):
+def delete_server(server_id: str):
   try:
     supabase = get_supabase()
-    supabase.table("servers").delete().eq("id", server_id).execute()
+    # Handle both numeric id and uuid safely
+    val = int(server_id) if server_id.isdigit() else server_id
+    supabase.table("servers").delete().eq("id", val).execute()
     return {"status": "success", "message": "Server terminated successfully"}
   except Exception as e:
     raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.post("/api/servers/{server_id}/toggle")
-def toggle_status(server_id: int):
+def toggle_status(server_id: str):
   try:
     supabase = get_supabase()
+    val = int(server_id) if server_id.isdigit() else server_id
+
     res = (
-        supabase.table("servers")
-        .select("status")
-        .eq("id", server_id)
-        .single()
-        .execute()
+        supabase.table("servers").select("status").eq("id", val).single().execute()
     )
     current_status = res.data.get("status", "running")
     new_status = "stopped" if current_status == "running" else "running"
 
     supabase.table("servers").update({"status": new_status}).eq(
-        "id", server_id
+        "id", val
     ).execute()
     return {"status": "success", "new_status": new_status}
   except Exception as e:
