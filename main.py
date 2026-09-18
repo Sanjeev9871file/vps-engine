@@ -1,7 +1,6 @@
 import os
 import random
 import string
-from typing import Union
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -31,6 +30,10 @@ def get_supabase() -> Client:
 class VPSRequest(BaseModel):
   name: str
   os: str = "Ubuntu 24.04 LTS"
+
+
+class CommandRequest(BaseModel):
+  command: str
 
 
 @app.get("/")
@@ -83,7 +86,6 @@ def get_servers():
 def delete_server(server_id: str):
   try:
     supabase = get_supabase()
-    # Handle both numeric id and uuid safely
     val = int(server_id) if server_id.isdigit() else server_id
     supabase.table("servers").delete().eq("id", val).execute()
     return {"status": "success", "message": "Server terminated successfully"}
@@ -109,3 +111,30 @@ def toggle_status(server_id: str):
     return {"status": "success", "new_status": new_status}
   except Exception as e:
     raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/servers/{server_id}/exec")
+def exec_terminal(server_id: str, req: CommandRequest):
+  cmd = req.command.strip().lower()
+  if cmd == "uname -a":
+    output = "Linux vps-node 6.8.0-generic #1 SMP PREEMPT_DYNAMIC x86_64 GNU/Linux"
+  elif cmd == "uptime":
+    output = "up 14 days, 3 hours, 22 min, 1 user, load average: 0.12, 0.08, 0.05"
+  elif cmd == "whoami":
+    output = "root"
+  elif cmd in ["ls", "ls -la"]:
+    output = "total 28\ndrwx------ 4 root root 4096 Sep 18 02:00 .\ndrwxr-xr-x 19 root root 4096 Sep 18 01:15 ..\n-rw-r--r-- 1 root root 3106 Apr 22 2024 .bashrc\n-rw-r--r-- 1 root root  161 Jul  9 2019 .profile"
+  elif cmd in ["free -h", "free -m"]:
+    output = (
+        "               total        used        free      shared  buff/cache"
+        "   available\nMem:           2.0Gi       480Mi       1.2Gi        12Mi"
+        "       360Mi       1.5Gi\nSwap:          1.0Gi          0B       1.0Gi"
+    )
+  elif cmd == "df -h":
+    output = "Filesystem      Size  Used Avail Use% Mounted on\n/dev/sda1        40G  4.2G   34G  11% /\ntmpfs           1.0G     0  1.0G   0% /dev/shm"
+  elif cmd == "clear":
+    output = "__CLEAR__"
+  else:
+    output = f"bash: {cmd}: command not found (try: uname -a, uptime, whoami, ls, free -h, df -h)"
+
+  return {"command": req.command, "output": output}
