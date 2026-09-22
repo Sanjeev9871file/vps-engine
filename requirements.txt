@@ -3,4 +3,5 @@ uvicorn
 supabase
 requests
 pydantic
+python-multipart
 tenacity>=8.2.3
