@@ -3,7 +3,4 @@ uvicorn
 supabase
 requests
 pydantic
-mega.py
-google-api-python-client
-google-auth
-
+tenacity>=8.2.3
