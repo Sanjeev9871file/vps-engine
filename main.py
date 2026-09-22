@@ -4,7 +4,6 @@ import string
 import time
 from fastapi import BackgroundTasks, FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from mega import Mega
 from pydantic import BaseModel
 import requests
 from supabase import Client, create_client
@@ -18,7 +17,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# --- Clean & Secure Secrets Vault (No Hardcoded Keys) ---
+# --- Clean & Secure Secrets Vault ---
 SUPABASE_URL = os.getenv("SUPABASE_URL", "")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY", "")
 
@@ -166,10 +165,8 @@ def get_provider_usage(provider: str) -> int:
 
 
 def select_storage_target(file_size: int) -> str:
-  # Supabase: 50 MB threshold for quick logs/metadata
   if get_provider_usage("supabase") + file_size < 50 * 1024 * 1024:
     return "supabase"
-  # Mega: 20 GB threshold
   if get_provider_usage("mega") + file_size < 20 * 1024 * 1024 * 1024:
     return "mega"
   return "terabox_archive"
@@ -220,6 +217,7 @@ async def upload_file_to_pool(file: UploadFile = File(...)):
 
     if target == "mega" and MEGA_EMAIL and MEGA_PASSWORD:
       try:
+        from mega import Mega
         mega = Mega()
         m = mega.login(MEGA_EMAIL, MEGA_PASSWORD)
         temp_path = f"/tmp/{file.filename}"
@@ -232,14 +230,10 @@ async def upload_file_to_pool(file: UploadFile = File(...)):
           os.remove(temp_path)
       except Exception:
         target = "supabase"
-        download_url = (
-            f"{SUPABASE_URL}/storage/v1/object/public/system/{file_path}"
-        )
+        download_url = f"{SUPABASE_URL}/storage/v1/object/public/system/{file_path}"
     else:
       target = "supabase"
-      download_url = (
-          f"{SUPABASE_URL}/storage/v1/object/public/system/{file_path}"
-      )
+      download_url = f"{SUPABASE_URL}/storage/v1/object/public/system/{file_path}"
 
     supabase = get_supabase()
     supabase.table("file_registry").insert({
@@ -326,4 +320,3 @@ def delete_server(server_id: str):
     return {"status": "success"}
   except Exception as e:
     raise HTTPException(status_code=500, detail=str(e))
-
