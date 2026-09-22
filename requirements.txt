@@ -1,4 +1,9 @@
 fastapi
 uvicorn
-pydantic
 supabase
+requests
+pydantic
+mega.py
+google-api-python-client
+google-auth
+
